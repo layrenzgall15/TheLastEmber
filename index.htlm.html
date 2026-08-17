@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>The Last Ember — Ship's Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Space+Grotesk:wght@400;500;600&family=Space+Mono&display=swap" rel="stylesheet">
+
+<!--
+  SETUP INSTRUCTIONS
+  1. Go to https://console.firebase.google.com and create a NEW project (e.g. "last-ember-log").
+  2. In that project, enable Firestore Database (start in production mode).
+  3. In Firestore Rules, set read/write to true for now (lock down later if you want):
+       rules_version = '2';
+       service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if true; } } }
+  4. Project settings > General > Your apps > Web app > copy the firebaseConfig object.
+  5. Paste it into FIREBASE_CONFIG below, replacing the placeholder.
+  6. Push this file to a GitHub repo, enable GitHub Pages on it, done.
+
+  Note: images are stored as compressed base64 data directly in Firestore documents,
+  not in Firebase Storage — this avoids needing the paid Blaze plan entirely.
+-->
+
+<style>
+:root{
+  --bg:#060814; --panel:#0D1326; --panel-raised:#131B33; --panel-hover:#182246;
+  --text:#E8ECF5; --text-soft:#8B93B0; --text-faint:#565F7D;
+  --amber:#FFB454; --amber-glow:rgba(255,180,84,.35); --amber-bg:rgba(255,180,84,.08);
+  --teal:#4FE0C4; --teal-glow:rgba(79,224,196,.35); --teal-bg:rgba(79,224,196,.08);
+  --danger:#FF6B5E; --danger-bg:rgba(255,107,94,.1);
+  --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.18);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh}
+#stars{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.star{position:absolute;background:#fff;border-radius:50%;animation:twinkle linear infinite}
+@keyframes twinkle{0%,100%{opacity:.15}50%{opacity:.9}}
+.wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:2.5rem 1.5rem 5rem}
+.mono{font-family:'Space Mono',monospace}
+.display{font-family:'Orbitron',sans-serif;letter-spacing:.04em}
+.masthead{text-align:center;margin-bottom:2rem}
+.masthead h1{font-size:24px;font-weight:700;margin:0;color:var(--text);text-shadow:0 0 20px var(--amber-glow)}
+.masthead p{margin:.5rem 0 0;color:var(--text-soft);font-size:13px;letter-spacing:.05em}
+.tabs{display:flex;gap:8px;margin-bottom:1.5rem;justify-content:center}
+.tab{font-family:'Orbitron',sans-serif;font-size:12px;letter-spacing:.05em;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 20px;cursor:pointer;color:var(--text-soft);transition:.2s}
+.tab:hover{border-color:var(--border-strong);color:var(--text)}
+.tab.active{background:var(--amber-bg);border-color:var(--amber);color:var(--amber);box-shadow:0 0 16px var(--amber-glow)}
+.page{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.75rem}
+.section-label{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.card{background:var(--panel-raised);border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;transition:.2s;position:relative}
+.card:hover{border-color:var(--border-strong);background:var(--panel-hover);transform:translateY(-1px)}
+.card-thumb{width:100%;aspect-ratio:1/1;border-radius:6px;object-fit:cover;margin-bottom:10px;background:var(--bg)}
+.card-thumb-placeholder{width:100%;aspect-ratio:1/1;border-radius:6px;margin-bottom:10px;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:11px;border:1px dashed var(--border-strong)}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.card h3{font-size:15px;font-weight:500;margin:0}
+.seal{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;font-weight:600}
+.seal.on{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber);box-shadow:0 0 10px var(--amber-glow)}
+.seal.off{background:transparent;border:1px solid var(--text-faint);color:var(--text-faint)}
+.card .role{font-size:12px;color:var(--text-soft);margin:0 0 6px}
+.card .origin{font-size:11px;color:var(--text-faint)}
+button{font-family:'Space Grotesk',sans-serif;font-size:14px;background:var(--panel-hover);border:1px solid var(--border-strong);border-radius:6px;padding:11px 16px;cursor:pointer;color:var(--text);transition:.2s;min-height:44px}
+button:hover{border-color:var(--amber);color:var(--amber)}
+button.primary{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
+input,textarea,select{font-family:'Space Grotesk',sans-serif;font-size:16px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;color:var(--text);width:100%;min-height:44px}
+textarea{min-height:80px}
+input:focus,textarea:focus{outline:none;border-color:var(--amber)}
+.pc-row{display:grid;grid-template-columns:1fr 1fr 1fr 100px;gap:8px;align-items:end;margin-bottom:10px}
+.pc-row label{font-size:10px;color:var(--text-faint);display:block;margin-bottom:3px;letter-spacing:.04em}
+.summary-bar{margin:1rem 0;padding:10px 14px;background:var(--teal-bg);border:1px solid var(--teal);border-radius:8px;font-size:13px;color:var(--teal)}
+.summary-bar.summary-warn{background:var(--danger-bg);border-color:var(--danger);color:var(--danger)}
+.loc-card.discovered{border-color:var(--teal)}
+.log-entry{border-bottom:1px solid var(--border);padding:14px 0}
+.log-entry:last-child{border-bottom:none}
+.log-entry .ts{font-size:11px;color:var(--text-faint)}
+.log-add{display:flex;flex-direction:column;gap:8px;margin-bottom:1.5rem}
+.log-add textarea{min-height:60px}
+.hint{font-size:12px;color:var(--text-faint);margin-top:8px}
+.overlay{position:fixed;inset:0;background:rgba(2,4,12,.75);backdrop-filter:blur(3px);z-index:50;display:flex;align-items:center;justify-content:center;padding:1.5rem}
+.modal{background:var(--panel);border:1px solid var(--border-strong);border-radius:14px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;padding:1.75rem;box-shadow:0 0 40px rgba(0,0,0,.5)}
+.modal-close{float:right;background:transparent;border:none;color:var(--text-soft);font-size:20px;cursor:pointer;padding:0 4px}
+.upload-zone{border:1px dashed var(--border-strong);border-radius:8px;padding:1.25rem;text-align:center;margin-bottom:14px;cursor:pointer}
+.upload-zone:hover{border-color:var(--amber)}
+.field{margin-bottom:12px}
+.field label{font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px;letter-spacing:.04em;text-transform:uppercase}
+.status-pill{font-size:11px;padding:4px 10px;border-radius:20px;font-family:'Space Mono',monospace}
+.status-alive{background:var(--teal-bg);color:var(--teal)}
+.status-fallen{background:var(--danger-bg);color:var(--danger)}
+.grid-wrap{overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;position:relative;scroll-snap-type:x proximity}
+.starmap-outer{display:inline-grid;grid-template-columns:28px repeat(14,44px);grid-template-rows:24px repeat(10,44px);gap:0}
+.gcol-label,.grow-label{display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:10px;color:var(--text-faint);scroll-snap-align:start}
+.swipe-hint{display:none;text-align:center;font-family:'Space Mono',monospace;font-size:11px;color:var(--text-faint);margin-top:6px}
+.gcell{border:1px solid var(--border);position:relative;background:var(--panel-raised)}
+.gcell:hover{background:var(--panel-hover)}
+.gmarker{position:absolute;inset:3px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:8px;text-align:center;overflow:hidden;line-height:1.05}
+.add-loc-form{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;margin-top:1rem;align-items:end}
+.add-loc-form .field label{margin-bottom:3px}
+.add-crew-form{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-top:1rem;align-items:end}
+.add-crew-form .field label{margin-bottom:3px}
+.swatches{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.swatch{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+.swatch.selected{border-color:var(--text)}
+.status-other{background:rgba(180,140,255,.1);color:#B48CFF}
+.status-damaged{background:var(--amber-bg);color:var(--amber)}
+.status-offline{background:rgba(255,255,255,.08);color:var(--text-faint)}
+.legend-bar{display:flex;gap:10px;align-items:end;margin-bottom:1rem}
+.legend-bar .field{flex:1;margin-bottom:0}
+.log-actions{display:flex;gap:8px;margin-top:6px}
+.log-actions button{font-size:12px;padding:8px 12px;min-height:38px}
+.sig{font-family:'Space Mono',monospace;font-size:11px;color:var(--amber);margin-top:6px}
+@media (max-width:640px){
+  body{font-size:16px}
+  .wrap{padding:1.25rem .85rem 3rem}
+  .masthead{margin-bottom:1.25rem}
+  .masthead h1{font-size:19px}
+  .page{padding:1rem;border-radius:10px}
+  .tabs{gap:6px}
+  .tab{padding:10px 12px;font-size:11px;flex:1}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .card{padding:12px}
+  .add-loc-form{grid-template-columns:1fr}
+  .add-crew-form{grid-template-columns:1fr}
+  .legend-bar{flex-direction:column;align-items:stretch}
+  .starmap-outer{grid-template-columns:24px repeat(14,38px);grid-template-rows:22px repeat(10,38px)}
+  .swipe-hint{display:block}
+  .overlay{padding:0;align-items:flex-end}
+  .modal{max-width:100%;border-radius:14px 14px 0 0;max-height:92vh;padding:1.25rem;-webkit-overflow-scrolling:touch}
+  .swatch{width:36px;height:36px}
+}
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<div class="wrap">
+  <div class="masthead">
+    <h1 class="display">THE LAST EMBER</h1>
+    <p class="mono">SHIP'S LOG</p>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="page" id="page"></div>
+</div>
+<div id="modalRoot"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ============ REPLACE THIS WITH YOUR OWN FIREBASE CONFIG ============
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+// ======================================================================
+let db=null;
+try{
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+}catch(e){
+  console.error("Firebase failed to initialize — check FIREBASE_CONFIG. Running in local-only preview mode.",e);
+}
+
+// starfield
+(function(){
+  const c=document.getElementById("stars");
+  for(let i=0;i<120;i++){
+    const s=document.createElement("div");
+    s.className="star";
+    const size=Math.random()*2+0.5;
+    s.style.width=size+"px"; s.style.height=size+"px";
+    s.style.left=Math.random()*100+"%"; s.style.top=Math.random()*100+"%";
+    s.style.animationDuration=(Math.random()*3+2)+"s";
+    s.style.animationDelay=(Math.random()*3)+"s";
+    c.appendChild(s);
+  }
+})();
+
+let tab="crew";
+let state={crew:[],locations:[],log:[],ship:[]};
+
+const STATUS_OPTIONS=["Active","Injured","Missing","Fallen","Unknown"];
+const SHIP_STATUS_OPTIONS=["Operational","Damaged","Critical","Offline"];
+const LOC_COLORS=[
+  {name:"amber",hex:"#FFB454"},{name:"teal",hex:"#4FE0C4"},{name:"red",hex:"#FF6B5E"},
+  {name:"violet",hex:"#B48CFF"},{name:"green",hex:"#7ED88A"},{name:"blue",hex:"#5FA8FF"}
+];
+const defaultShip=()=>[
+{id:"s1",name:"Forecastle",status:"Operational",note:"The raised bow platform, first to meet whatever's ahead. Anchor windlass, coiled rope, a lookout's perch barely wide enough for one. Salvaged Belerdieu ironwork reinforces the railing.",img:""},
+{id:"s2",name:"Cargo Hatch",status:"Operational",note:"Heavy, rope-and-pulley hinged hatch, primary access to the hold below. The ship's most honest weak point — the seam where Earthkeep's salvaged plating meets Belerdieu's war-forged sections.",img:""},
+{id:"s3",name:"Quarterdeck & Helm",status:"Operational",note:"A slightly raised stern platform, the ship's wheel mounted here. No captain's throne — whoever's competent and it's their turn stands here. A compass that stops making sense once the ship crosses into the Distant Plane.",img:""},
+{id:"s4",name:"Rigging & Sails",status:"Operational",note:"Masts, canvas, real rope — a genuine sailing rig, somehow still catching wind in a vacuum that shouldn't have any. Ilyra's magic bleeding into the mundane parts of the ship.",img:""},
+{id:"s5",name:"Cargo Hold",status:"Operational",note:"The largest interior space — crates, barrels, whatever's been picked up along the way. Doubles as overflow space during a crisis.",img:""},
+{id:"s6",name:"Crew Berth",status:"Operational",note:"Cramped, shared, functional. Hammocks or narrow bunks, personal sea chests. Nobody has a private room here — fitting, for a crew doing this together.",img:""},
+{id:"s7",name:"The War Room",status:"Operational",note:"A small stern room, repurposed from what would've been a captain's quarters on any normal ship. Instead: a shared chart table, maps, notes — used by whoever needs quiet to think, plan, or have a hard conversation. Belongs to no one specifically.",img:""},
+{id:"s8",name:"Galley",status:"Operational",note:"Small, practical, barely room for one cook and a helper. Where the ship actually feels lived-in.",img:""},
+{id:"s9",name:"The Core Chamber",status:"Operational",note:"Houses the artifact — the device enabling the ship to cross the Distant Plane at all. Ilyra maintains it through regular check-ins rather than constant supervision (still being worked out). Cramped, faintly humming, warm in a way nothing else aboard is.",img:""}
+];
+const defaultCrew=()=>[
+{id:"crew1",name:"",role:"",origin:"",note:"",img:"",status:"Active"},
+{id:"crew2",name:"",role:"",origin:"",note:"",img:"",status:"Active"},
+{id:"crew3",name:"",role:"",origin:"",note:"",img:"",status:"Active"},
+{id:"crew4",name:"",role:"",origin:"",note:"",img:"",status:"Active"},
+{id:"crew5",name:"",role:"",origin:"",note:"",img:"",status:"Active"},
+{id:"c1",name:"Brakka Stonefel",role:"Engineering / Systems Maintenance",origin:"Belerdieu, dockworks district",note:"Personally involved in the Ember's construction from the keel up.",img:"",status:"Active"},
+{id:"c2",name:"Weylin Ashcombe",role:"Security / Combat",origin:"Belerdieu, front-line conscript",note:"Two years active service. Quiet about most of it.",img:"",status:"Active"},
+{id:"c3",name:"Sable \"Cook\" Doone",role:"Provisions / General Support",origin:"Earthkeep, itinerant caravans",note:"Notices crew tension before it becomes a problem.",img:"",status:"Active"},
+{id:"c4",name:"Dr. Reya Finch",role:"Medical",origin:"Belerdieu, field medical corps",note:"Eighteen months of continuous field triage.",img:"",status:"Active"},
+{id:"c5",name:"Kessa Vane",role:"Reconnaissance / Acquisitions",origin:"Earthkeep, unregistered",note:"Sourced several of the ship's more questionable components.",img:"",status:"Active"},
+{id:"c6",name:"Toma Reyes",role:"Navigation",origin:"Earthkeep, records incomplete",note:"Consistently accurate headings under conditions that shouldn't allow it.",img:"",status:"Active"}
+];
+const defaultLocations=()=>[];
+
+async function loadAll(){
+  if(!db){
+    state.crew=defaultCrew(); state.ship=defaultShip(); state.locations=defaultLocations(); state.log=[];
+    render();
+    return;
+  }
+  try{
+    const [crewSnap,shipSnap,locSnap,logSnap,legendSnap]=await Promise.all([
+      db.collection("crew").get(), db.collection("ship").get(),
+      db.collection("locations").get(), db.collection("log").orderBy("ts","desc").get(),
+      db.collection("meta").doc("gridLegend").get()
+    ]);
+    state.crew = crewSnap.empty ? await seed("crew",defaultCrew()) : crewSnap.docs.map(d=>d.data());
+    state.ship = shipSnap.empty ? await seed("ship",defaultShip()) : shipSnap.docs.map(d=>d.data());
+    state.locations = locSnap.empty ? await seed("locations",defaultLocations()) : locSnap.docs.map(d=>d.data());
+    state.log = logSnap.docs.map(d=>d.data());
+    state.legend = legendSnap.exists ? legendSnap.data().value : "";
+  }catch(e){
+    console.error("Firebase not configured yet, running in local-only preview mode.",e);
+    state.crew=defaultCrew(); state.ship=defaultShip(); state.locations=defaultLocations(); state.log=[]; state.legend="";
+  }
+  render();
+}
+async function seed(col,items){
+  if(!db)return items;
+  for(const item of items){ await db.collection(col).doc(item.id).set(item).catch(()=>{}); }
+  return items;
+}
+async function saveDoc(col,item){
+  if(!db)return;
+  try{ await db.collection(col).doc(item.id).set(item); }catch(e){ console.warn("save failed (offline / no config)",e); }
+}
+
+function renderTabs(){
+  const t=document.getElementById("tabs");
+  let narrow=false;
+  try{ narrow=window.matchMedia("(max-width:480px)").matches; }catch(e){}
+  const tabs=narrow
+    ? [["crew","CREW"],["ship","SHIP"],["locations","MAP"],["log","LOG"]]
+    : [["crew","CREW"],["ship","SHIP"],["locations","LOCATIONS"],["log","CAPTAIN'S LOG"]];
+  t.innerHTML=tabs.map(([id,label])=>'<button class="tab '+(tab===id?'active':'')+'" onclick="setTab(\''+id+'\')">'+label+'</button>').join("");
+}
+window.addEventListener("resize",renderTabs);
+function setTab(id){tab=id;render();}
+window.setTab=setTab;
+
+function render(){
+  try{
+    renderTabs();
+    const p=document.getElementById("page");
+    if(tab==="crew")renderCrew(p);
+    else if(tab==="ship")renderShip(p);
+    else if(tab==="locations")renderLocations(p);
+    else renderLog(p);
+  }catch(err){
+    console.error("Render failed:",err);
+    const p=document.getElementById("page");
+    if(p){
+      p.innerHTML='<div style="padding:1rem;border:1px solid var(--danger);border-radius:8px;background:var(--danger-bg)">'+
+        '<p style="margin:0 0 8px;color:var(--danger);font-family:Orbitron,sans-serif;font-size:13px">SOMETHING WENT WRONG</p>'+
+        '<p style="margin:0;font-size:13px;font-family:\'Space Mono\',monospace">'+esc(err.message||String(err))+'</p></div>';
+    }
+  }
+}
+
+function thumb(img){
+  return img ? '<img class="card-thumb" src="'+img+'"/>' : '<div class="card-thumb-placeholder">NO IMAGE ON FILE</div>';
+}
+
+function statusPillHtml(status){
+  const cls = status==="Fallen" ? "status-fallen" : status==="Active" ? "status-alive" : "status-other";
+  return '<span class="status-pill '+cls+'">'+esc(status||"Unknown")+'</span>';
+}
+function shipStatusPillHtml(status){
+  const cls = status==="Operational" ? "status-alive" : status==="Critical" ? "status-fallen" : status==="Offline" ? "status-offline" : "status-damaged";
+  return '<span class="status-pill '+cls+'">'+esc(status||"Operational")+'</span>';
+}
+
+function renderCrew(p){
+  let h='<div class="section-label">Crew</div>';
+  h+='<div class="grid">'+state.crew.map(c=>
+    '<div class="card" onclick="openModal(\'crew\',\''+c.id+'\')">'+thumb(c.img)+
+    '<div class="card-head"><h3>'+esc(c.name||"Unnamed")+'</h3></div>'+
+    '<p class="role">'+esc(c.role||"—")+'</p>'+
+    '<p class="origin mono">'+esc(c.origin||"")+'</p>'+
+    statusPillHtml(c.status)+
+    '</div>'
+  ).join("")+'</div>';
+  h+='<div class="add-crew-form">'+
+    '<div class="field"><label>Name</label><input id="newCrewName" placeholder="Add a crew member"/></div>'+
+    '<div class="field"><label>Role</label><input id="newCrewRole" placeholder="e.g. Navigator"/></div>'+
+    '<button class="primary" onclick="addCrewMember()">Add to crew</button>'+
+  '</div>';
+  p.innerHTML=h;
+}
+async function addCrewMember(){
+  const name=document.getElementById("newCrewName").value.trim();
+  if(!name)return;
+  const role=document.getElementById("newCrewRole").value.trim();
+  const c={id:"crew_"+Date.now(),name,role,origin:"",note:"",img:"",status:"Active"};
+  state.crew.push(c);
+  await saveDoc("crew",c);
+  render();
+}
+window.addCrewMember=addCrewMember;
+
+function renderShip(p){
+  const operational=state.ship.filter(s=>s.status==="Operational").length;
+  const cls = operational===state.ship.length ? "summary-bar" : "summary-bar summary-warn";
+  let h='<div class="'+cls+'">'+operational+' of '+state.ship.length+' systems reading Operational</div>';
+  h+='<div class="section-label">Ship systems — click an area to check on it</div>';
+  h+='<div class="grid">'+state.ship.map(s=>
+    '<div class="card" onclick="openModal(\'ship\',\''+s.id+'\')">'+thumb(s.img)+
+    '<div class="card-head"><h3>'+esc(s.name)+'</h3></div>'+
+    shipStatusPillHtml(s.status)+
+    '</div>'
+  ).join("")+'</div>';
+  h+='<div class="add-crew-form">'+
+    '<div class="field"><label>Area name</label><input id="newShipName" placeholder="e.g. Port Hull Plating"/></div>'+
+    '<button class="primary" onclick="addShipArea()">Log new area</button>'+
+  '</div>';
+  p.innerHTML=h;
+}
+async function addShipArea(){
+  const name=document.getElementById("newShipName").value.trim();
+  if(!name)return;
+  const s={id:"ship_"+Date.now(),name,status:"Operational",note:"",img:""};
+  state.ship.push(s);
+  await saveDoc("ship",s);
+  render();
+}
+window.addShipArea=addShipArea;
+async function removeShipArea(id){
+  state.ship=state.ship.filter(x=>x.id!==id);
+  if(db){ try{ await db.collection("ship").doc(id).delete(); }catch(e){} }
+  closeModal();
+}
+window.removeShipArea=removeShipArea;
+const GRID_COLS="ABCDEFGHIJKLMN".split("");
+const GRID_ROWS=[1,2,3,4,5,6,7,8,9,10];
+
+function renderLocations(p){
+  let h='<div class="legend-bar"><div class="field"><label>Grid scale (fill in once discovered)</label>'+
+    '<input id="gridLegend" value="'+esc(state.legend||"")+'" placeholder="e.g. 1 square = 3 lightyears — the crew\'s call" oninput="updateLegend(this.value)"/></div></div>';
+  h+='<div class="section-label">Charted space — click a marker to view, use the form below to log a new find</div>';
+  h+='<div class="grid-wrap"><div class="starmap-outer">';
+  h+='<div class="gcol-label"></div>';
+  GRID_COLS.forEach(c=>h+='<div class="gcol-label">'+c+'</div>');
+  GRID_ROWS.forEach(r=>{
+    h+='<div class="grow-label">'+r+'</div>';
+    GRID_COLS.forEach(c=>{
+      const coord=c+r;
+      const loc=state.locations.find(l=>l.coord===coord);
+      const hex=loc?(LOC_COLORS.find(x=>x.name===loc.color)||LOC_COLORS[0]).hex:"";
+      h+='<div class="gcell">'+(loc?'<div class="gmarker" style="background:'+hex+'22;border:1.5px solid '+hex+';box-shadow:0 0 10px '+hex+'55;color:'+hex+'" onclick="openModal(\'locations\',\''+loc.id+'\')" title="'+esc(loc.name)+'">'+esc(loc.name.slice(0,9))+'</div>':'')+'</div>';
+    });
+  });
+  h+='</div></div>';
+  h+='<p class="swipe-hint">← swipe to explore the full chart →</p>';
+
+  h+='<div class="add-loc-form">'+
+    '<div class="field"><label>Location name</label><input id="newLocName" placeholder="Name it as the crew would"/></div>'+
+    '<div class="field"><label>Column</label><select id="newLocCol">'+GRID_COLS.map(c=>'<option>'+c+'</option>').join("")+'</select></div>'+
+    '<div class="field"><label>Row</label><select id="newLocRow">'+GRID_ROWS.map(r=>'<option>'+r+'</option>').join("")+'</select></div>'+
+    '<button class="primary" onclick="addLocation()">Log location</button>'+
+  '</div>';
+  h+='<p class="hint">Nothing is charted until the crew charts it. Add a location the moment it\'s discovered, found on a Voyager\'s map, or confirmed in play.</p>';
+  p.innerHTML=h;
+}
+async function updateLegend(val){
+  state.legend=val;
+  if(db){ try{ await db.collection("meta").doc("gridLegend").set({value:val}); }catch(e){} }
+}
+window.updateLegend=updateLegend;
+async function addLocation(){
+  const name=document.getElementById("newLocName").value.trim();
+  if(!name)return;
+  const coord=document.getElementById("newLocCol").value+document.getElementById("newLocRow").value;
+  if(state.locations.some(l=>l.coord===coord)){alert("That grid cell is already occupied — pick another, or open the existing marker.");return;}
+  const loc={id:"l_"+Date.now(),name,coord,kind:"",note:"",img:"",color:"amber"};
+  state.locations.push(loc);
+  await saveDoc("locations",loc);
+  render();
+}
+window.addLocation=addLocation;
+
+function renderLog(p){
+  let h='<div class="section-label">New entry</div>';
+  const crewOptions=state.crew.filter(c=>c.name).map(c=>'<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>').join("");
+  h+='<div class="log-add">'+
+    '<select id="logSig"><option value="">Signed by...</option>'+crewOptions+'</select>'+
+    '<textarea id="logInput" placeholder="Begin your entry..."></textarea>'+
+    '<button class="primary" onclick="addLog()" style="align-self:flex-start">Add entry</button></div>';
+  h+='<div class="section-label">Entries</div>';
+  if(state.log.length===0){h+='<p class="hint">No entries yet. The log starts empty, same as the ship did.</p>';}
+  h+=state.log.map(e=>
+    '<div class="log-entry" id="entry_'+e.id+'"><p class="ts mono">'+esc(e.ts)+'</p>'+
+    '<p id="entryText_'+e.id+'">'+esc(e.text)+'</p>'+
+    (e.sig?'<p class="sig">— '+esc(e.sig)+'</p>':'')+
+    '<div class="log-actions"><button onclick="startEditLog(\''+e.id+'\')">Edit</button><button onclick="deleteLog(\''+e.id+'\')">Delete</button></div>'+
+    '</div>'
+  ).join("");
+  p.innerHTML=h;
+}
+async function addLog(){
+  const input=document.getElementById("logInput");
+  const sigInput=document.getElementById("logSig");
+  const text=input.value.trim();
+  if(!text)return;
+  const entry={id:"log_"+Date.now(),text,sig:sigInput.value,ts:new Date().toLocaleString()};
+  state.log.unshift(entry);
+  await saveDoc("log",entry);
+  render();
+}
+window.addLog=addLog;
+
+function startEditLog(id){
+  const e=state.log.find(x=>x.id===id);
+  const el=document.getElementById("entryText_"+id);
+  el.outerHTML='<textarea id="entryEdit_'+id+'" style="min-height:60px;margin-bottom:6px">'+esc(e.text)+'</textarea>'+
+    '<div class="log-actions"><button class="primary" onclick="saveEditLog(\''+id+'\')">Save</button><button onclick="render()">Cancel</button></div>';
+}
+window.startEditLog=startEditLog;
+async function saveEditLog(id){
+  const e=state.log.find(x=>x.id===id);
+  const val=document.getElementById("entryEdit_"+id).value.trim();
+  if(!val)return;
+  e.text=val;
+  await saveDoc("log",e);
+  render();
+}
+window.saveEditLog=saveEditLog;
+async function deleteLog(id){
+  state.log=state.log.filter(x=>x.id!==id);
+  if(db){ try{ await db.collection("log").doc(id).delete(); }catch(e){} }
+  render();
+}
+window.deleteLog=deleteLog;
+
+// ---- detail modal ----
+function openModal(col,id){
+  const item=state[col].find(x=>x.id===id);
+  const root=document.getElementById("modalRoot");
+  const isCrew=col==="crew", isLoc=col==="locations", isShip=col==="ship";
+  root.innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">'+
+    '<button class="modal-close" onclick="closeModal()">×</button>'+
+    (isCrew?'<div class="field"><label>Name</label><input value="'+esc(item.name)+'" oninput="modalUpdate(\''+col+'\',\''+id+'\',\'name\',this.value)"/></div>'
+           :'<h2 class="display" style="font-size:18px;margin:0 0 4px">'+esc(item.name)+'</h2>')+
+    '<div class="upload-zone" onclick="document.getElementById(\'imgInput\').click()">'+
+      (item.img?'<img src="'+item.img+'" style="max-width:100%;max-height:180px;border-radius:6px;margin-bottom:8px"/>':'')+
+      '<p style="margin:0;font-size:13px;color:var(--text-soft)">Click to upload an image</p>'+
+      '<input type="file" id="imgInput" accept="image/*" style="display:none" onchange="uploadImage(\''+col+'\',\''+id+'\',this)"/>'+
+    '</div>'+
+    (isCrew?'<div class="field"><label>Role</label><input value="'+esc(item.role)+'" oninput="modalUpdate(\''+col+'\',\''+id+'\',\'role\',this.value)"/></div>':'')+
+    (isCrew?'<div class="field"><label>Origin</label><input value="'+esc(item.origin)+'" oninput="modalUpdate(\''+col+'\',\''+id+'\',\'origin\',this.value)"/></div>':'')+
+    (isLoc?'<div class="field"><label>Kind</label><input value="'+esc(item.kind)+'" placeholder="Reach, waystation, wreck..." oninput="modalUpdate(\''+col+'\',\''+id+'\',\'kind\',this.value)"/></div>':'')+
+    (isLoc?'<div class="field"><label>Grid coordinate</label><input value="'+esc(item.coord)+'" style="max-width:100px" oninput="modalUpdate(\''+col+'\',\''+id+'\',\'coord\',this.value.toUpperCase())"/></div>':'')+
+    (isLoc?'<div class="field"><label>Marker color</label><div class="swatches">'+LOC_COLORS.map(c=>
+      '<div class="swatch '+(item.color===c.name?'selected':'')+'" style="background:'+c.hex+'" onclick="modalUpdate(\''+col+'\',\''+id+'\',\'color\',\''+c.name+'\');openModal(\''+col+'\',\''+id+'\')"></div>'
+    ).join("")+'</div></div>':'')+
+    (isCrew?'<div class="field"><label>Status</label><select onchange="modalUpdate(\''+col+'\',\''+id+'\',\'status\',this.value)">'+
+      STATUS_OPTIONS.map(s=>'<option value="'+s+'"'+(item.status===s?" selected":"")+'>'+s+'</option>').join("")+
+    '</select></div>':'')+
+    (isShip?'<div class="field"><label>Status</label><select onchange="modalUpdate(\''+col+'\',\''+id+'\',\'status\',this.value)">'+
+      SHIP_STATUS_OPTIONS.map(s=>'<option value="'+s+'"'+(item.status===s?" selected":"")+'>'+s+'</option>').join("")+
+    '</select></div>':'')+
+    '<div class="field"><label>Notes</label><textarea style="min-height:80px" oninput="modalUpdate(\''+col+'\',\''+id+'\',\'note\',this.value)">'+esc(item.note)+'</textarea></div>'+
+    (isCrew?'<button onclick="removeCrewMember(\''+id+'\')">Remove from crew</button>':'')+
+    (isShip?'<button onclick="removeShipArea(\''+id+'\')">Remove area</button>':'')+
+    (isLoc?'<button onclick="removeLocation(\''+id+'\')">Remove from chart</button>':'')+
+  '</div></div>';
+}
+function closeModal(){ document.getElementById("modalRoot").innerHTML=""; render(); }
+window.openModal=openModal; window.closeModal=closeModal;
+
+async function modalUpdate(col,id,field,val){
+  const item=state[col].find(x=>x.id===id); item[field]=val;
+  await saveDoc(col,item);
+}
+window.modalUpdate=modalUpdate;
+
+async function removeCrewMember(id){
+  state.crew=state.crew.filter(x=>x.id!==id);
+  if(db){ try{ await db.collection("crew").doc(id).delete(); }catch(e){} }
+  closeModal();
+}
+window.removeCrewMember=removeCrewMember;
+async function removeLocation(id){
+  state.locations=state.locations.filter(x=>x.id!==id);
+  if(db){ try{ await db.collection("locations").doc(id).delete(); }catch(e){} }
+  closeModal();
+}
+window.removeLocation=removeLocation;
+
+function resizeAndCompress(file, maxDim, quality){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(reader.error);
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error("Could not read that image file."));
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        if(w>h && w>maxDim){ h=Math.round(h*(maxDim/w)); w=maxDim; }
+        else if(h>maxDim){ w=Math.round(w*(maxDim/h)); h=maxDim; }
+        const canvas=document.createElement("canvas");
+        canvas.width=w; canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL("image/jpeg",quality));
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadImage(col,id,input){
+  const file=input.files[0]; if(!file)return;
+  try{
+    // Start at 500px/0.7 quality, shrink further if still too big for a single Firestore document (~1MB cap).
+    let dataUrl=await resizeAndCompress(file,500,0.7);
+    if(dataUrl.length>700000){ dataUrl=await resizeAndCompress(file,320,0.55); }
+    const item=state[col].find(x=>x.id===id); item.img=dataUrl;
+    await saveDoc(col,item);
+    openModal(col,id);
+  }catch(e){
+    alert("Image upload failed — try a smaller image, or a different file.");
+    console.error(e);
+  }
+}
+window.uploadImage=uploadImage;
+
+function esc(s){return (s||"").toString().replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+loadAll();
+</script>
+</body>
+</html>
